@@ -18,7 +18,6 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -216,10 +215,10 @@ func TestTopologyMatchPlugin(t *testing.T) {
 		name                   string
 		pods                   []*v1.Pod
 		nodeResourceTopologies []*topologyv1alpha1.NodeResourceTopology
-		expectedNode           string
+		expectedNodes          []string
 	}{
 		{
-			name: "Filtering out nodes that cannot fit resources on a single numa node in case of Guranteed pod",
+			name: "Filtering out nodes that cannot fit resources on a single numa node in case of Guaranteed pod",
 			pods: []*v1.Pod{
 				withContainer(st.MakePod().Namespace(ns.Name).Name("topology-aware-scheduler-pod").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4", v1.ResourceMemory: "5Gi"}).Obj(), pause, withResList("4", "50Gi"), withResList("4", "50Gi")),
 			},
@@ -301,8 +300,141 @@ func TestTopologyMatchPlugin(t *testing.T) {
 					},
 				},
 			},
-			expectedNode: "fake-node-2",
+			expectedNodes: []string{"fake-node-2"},
 		},
+		{
+			name: "Scheduling of a burstable pod requesting only cpus",
+			pods: []*v1.Pod{
+				withContainer(st.MakePod().Namespace(ns.Name).Name("topology-aware-scheduler-pod").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj(), pause, withResList("4", ""), withResList("4", "")),
+			},
+			nodeResourceTopologies: []*topologyv1alpha1.NodeResourceTopology{
+				{
+					ObjectMeta:       metav1.ObjectMeta{Name: "fake-node-1", Namespace: ns.Name},
+					TopologyPolicies: []string{string(topologyv1alpha1.SingleNUMANodeContainerLevel)},
+					Zones: topologyv1alpha1.ZoneList{
+						topologyv1alpha1.Zone{
+							Name: "node-0",
+							Type: "Node",
+							Resources: topologyv1alpha1.ResourceInfoList{
+								topologyv1alpha1.ResourceInfo{
+									Name:        "cpu",
+									Allocatable: intstr.FromString("4"),
+									Capacity:    intstr.FromString("4"),
+								},
+							},
+						},
+						topologyv1alpha1.Zone{
+							Name: "node-1",
+							Type: "Node",
+							Resources: topologyv1alpha1.ResourceInfoList{
+								topologyv1alpha1.ResourceInfo{
+									Name:        "cpu",
+									Allocatable: intstr.FromString("0"),
+									Capacity:    intstr.FromString("0"),
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta:       metav1.ObjectMeta{Name: "fake-node-2", Namespace: ns.Name},
+					TopologyPolicies: []string{string(topologyv1alpha1.SingleNUMANodeContainerLevel)},
+					Zones: topologyv1alpha1.ZoneList{
+						topologyv1alpha1.Zone{
+							Name: "node-0",
+							Type: "Node",
+							Resources: topologyv1alpha1.ResourceInfoList{
+								topologyv1alpha1.ResourceInfo{
+									Name:        "cpu",
+									Allocatable: intstr.FromString("2"),
+									Capacity:    intstr.FromString("2"),
+								},
+							},
+						},
+						topologyv1alpha1.Zone{
+							Name: "node-1",
+							Type: "Node",
+							Resources: topologyv1alpha1.ResourceInfoList{
+								topologyv1alpha1.ResourceInfo{
+									Name:        "cpu",
+									Allocatable: intstr.FromString("2"),
+									Capacity:    intstr.FromString("2"),
+								},
+							},
+						},
+					},
+				},
+			},
+			//both nodes are possible
+			expectedNodes: []string{"fake-node-1", "fake-node-2"},
+		},
+		{
+			name: "Scheduling of a burstable pod requesting only memory",
+			pods: []*v1.Pod{
+				withContainer(st.MakePod().Namespace(ns.Name).Name("topology-aware-scheduler-pod").Req(map[v1.ResourceName]string{v1.ResourceMemory: "5Gi"}).Obj(), pause, withResList("", "50Gi"), withResList("", "50Gi")),
+			},
+			nodeResourceTopologies: []*topologyv1alpha1.NodeResourceTopology{
+				{
+					ObjectMeta:       metav1.ObjectMeta{Name: "fake-node-1", Namespace: ns.Name},
+					TopologyPolicies: []string{string(topologyv1alpha1.SingleNUMANodeContainerLevel)},
+					Zones: topologyv1alpha1.ZoneList{
+						topologyv1alpha1.Zone{
+							Name: "node-0",
+							Type: "Node",
+							Resources: topologyv1alpha1.ResourceInfoList{
+								topologyv1alpha1.ResourceInfo{
+									Name:        "foo",
+									Allocatable: intstr.FromString("2"),
+									Capacity:    intstr.FromString("2"),
+								},
+							},
+						},
+						topologyv1alpha1.Zone{
+							Name: "node-1",
+							Type: "Node",
+							Resources: topologyv1alpha1.ResourceInfoList{
+								topologyv1alpha1.ResourceInfo{
+									Name:        "foo",
+									Allocatable: intstr.FromString("2"),
+									Capacity:    intstr.FromString("2"),
+								},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta:       metav1.ObjectMeta{Name: "fake-node-2", Namespace: ns.Name},
+					TopologyPolicies: []string{"foo"},
+					Zones: topologyv1alpha1.ZoneList{
+						topologyv1alpha1.Zone{
+							Name: "node-0",
+							Type: "Node",
+							Resources: topologyv1alpha1.ResourceInfoList{
+								topologyv1alpha1.ResourceInfo{
+									Name:        "foo",
+									Allocatable: intstr.FromString("2"),
+									Capacity:    intstr.FromString("2"),
+								},
+							},
+						},
+						topologyv1alpha1.Zone{
+							Name: "node-1",
+							Type: "Node",
+							Resources: topologyv1alpha1.ResourceInfoList{
+								topologyv1alpha1.ResourceInfo{
+									Name:        "foo",
+									Allocatable: intstr.FromString("2"),
+									Capacity:    intstr.FromString("2"),
+								},
+							},
+						},
+					},
+				},
+			},
+			//both nodes are possible
+			expectedNodes: []string{"fake-node-1", "fake-node-2"},
+		},
+		//TODO: Add more test cases
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Start-topology-match-test %v", tt.name)
@@ -333,30 +465,34 @@ func TestTopologyMatchPlugin(t *testing.T) {
 					t.Errorf("pod %q to be scheduled, error: %v", tt.pods[i].Name, err)
 				}
 
-				t.Logf(" p scheduled: %v", p)
-				podList, err := cs.CoreV1().Pods(ns.Name).List(ctx, metav1.ListOptions{})
-				if err != nil {
-					t.Logf("Error listing pods %v", err)
-				}
-				t.Logf(" podList: %v", podList)
+				t.Logf(" p scheduled: %v", p.Name)
 
 				// The other pods should be scheduled on the small nodes.
 				nodeName, err := getNodeName(cs, ns.Name, p.Name)
 				if err != nil {
 					t.Log(err)
 				}
-				if nodeName == tt.expectedNode {
-					t.Logf("Pod %q is on a node as expected.", p.Name)
+				if contains(tt.expectedNodes, nodeName) {
+					t.Logf("Pod %q is on a nodes as expected.", p.Name)
 					continue
 				} else {
 					t.Errorf("Pod %s is expected on node %s, but found on node %s",
-						tt.pods[i].Name, tt.expectedNode, p.Spec.NodeName)
+						tt.pods[i].Name, tt.expectedNodes, nodeName)
 				}
 
 			}
 			t.Logf("case %v finished", tt.name)
 		})
 	}
+}
+
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }
 
 // getNodeName returns the name of the node if a node has assigned to the given pod
@@ -471,15 +607,6 @@ func createNodeResourceTopologies(ctx context.Context, topologyClient *topologyc
 		_, err := topologyClient.TopologyV1alpha1().NodeResourceTopologies(nrt.Namespace).Create(ctx, nrt, metav1.CreateOptions{})
 		if err != nil && !errors.IsAlreadyExists(err) {
 			return err
-		}
-		crdInstance, err := topologyClient.TopologyV1alpha1().NodeResourceTopologies(nrt.Namespace).Get(ctx, nrt.Name, metav1.GetOptions{})
-		if err != nil {
-			klog.Infof(" Error in createNodeResourceTopologies not able to Get the CRD instance %s %v", nrt.Name, err)
-		}
-		crdInstJson, err := json.Marshal(crdInstance)
-		klog.Infof(string(crdInstJson))
-		if err != nil {
-			klog.Infof(" Error in createNodeResourceTopologies marshalling crdInstJson %v", err)
 		}
 	}
 	return nil
