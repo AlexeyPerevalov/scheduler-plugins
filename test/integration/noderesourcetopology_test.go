@@ -220,7 +220,7 @@ func TestTopologyMatchPlugin(t *testing.T) {
 		{
 			name: "Filtering out nodes that cannot fit resources on a single numa node in case of Guaranteed pod",
 			pods: []*v1.Pod{
-				withContainer(st.MakePod().Namespace(ns.Name).Name("topology-aware-scheduler-pod").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4", v1.ResourceMemory: "5Gi"}).Obj(), pause, withResList("4", "50Gi"), withResList("4", "50Gi")),
+				withContainer(Req(st.MakePod().Namespace(ns.Name).Name("topology-aware-scheduler-pod"), map[v1.ResourceName]string{v1.ResourceCPU: "4", v1.ResourceMemory: "50Gi"}).Obj(), pause),
 			},
 			nodeResourceTopologies: []*topologyv1alpha1.NodeResourceTopology{
 				{
@@ -305,7 +305,7 @@ func TestTopologyMatchPlugin(t *testing.T) {
 		{
 			name: "Scheduling of a burstable pod requesting only cpus",
 			pods: []*v1.Pod{
-				withContainer(st.MakePod().Namespace(ns.Name).Name("topology-aware-scheduler-pod").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj(), pause, withResList("4", ""), withResList("4", "")),
+				withContainer(st.MakePod().Namespace(ns.Name).Name("topology-aware-scheduler-pod").Req(map[v1.ResourceName]string{v1.ResourceCPU: "4"}).Obj(), pause),
 			},
 			nodeResourceTopologies: []*topologyv1alpha1.NodeResourceTopology{
 				{
@@ -371,7 +371,7 @@ func TestTopologyMatchPlugin(t *testing.T) {
 		{
 			name: "Scheduling of a burstable pod requesting only memory",
 			pods: []*v1.Pod{
-				withContainer(st.MakePod().Namespace(ns.Name).Name("topology-aware-scheduler-pod").Req(map[v1.ResourceName]string{v1.ResourceMemory: "5Gi"}).Obj(), pause, withResList("", "50Gi"), withResList("", "50Gi")),
+				withContainer(st.MakePod().Namespace(ns.Name).Name("topology-aware-scheduler-pod").Req(map[v1.ResourceName]string{v1.ResourceMemory: "5Gi"}).Obj(), pause),
 			},
 			nodeResourceTopologies: []*topologyv1alpha1.NodeResourceTopology{
 				{
@@ -509,16 +509,6 @@ func getNodeName(c clientset.Interface, podNamespace, podName string) (string, e
 	return pod.Spec.NodeName, nil
 }
 
-func withResList(cpu, memory string) v1.ResourceList {
-	res := v1.ResourceList{}
-	if cpu != "" {
-		res[v1.ResourceCPU] = resource.MustParse(cpu)
-	}
-	if memory != "" {
-		res[v1.ResourceMemory] = resource.MustParse(memory)
-	}
-	return res
-}
 func makeNodeResourceTopologyCRD() *apiextensionsv1.CustomResourceDefinition {
 	return &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{
@@ -621,9 +611,26 @@ func cleanupNodeResourceTopologies(ctx context.Context, topologyClient *topology
 	}
 }
 
-func withContainer(pod *v1.Pod, image string, resRequests v1.ResourceList, resLimits v1.ResourceList) *v1.Pod {
+func withContainer(pod *v1.Pod, image string) *v1.Pod {
 	pod.Spec.Containers[0].Name = "con0"
 	pod.Spec.Containers[0].Image = image
-	pod.Spec.Containers[0].Resources = v1.ResourceRequirements{Requests: resRequests, Limits: resLimits}
 	return pod
+}
+
+// Req adds a new container to the inner pod with given resource map.
+func Req(p *st.PodWrapper, resMap map[v1.ResourceName]string) *st.PodWrapper {
+	if len(resMap) == 0 {
+		return p
+	}
+	res := v1.ResourceList{}
+	for k, v := range resMap {
+		res[k] = resource.MustParse(v)
+	}
+	p.Spec.Containers = append(p.Spec.Containers, v1.Container{
+		Resources: v1.ResourceRequirements{
+			Requests: res,
+			Limits:   res,
+		},
+	})
+	return p
 }
