@@ -33,23 +33,30 @@ import (
 	framework "k8s.io/kubernetes/pkg/scheduler/framework/v1alpha1"
 )
 
-const nicResourceName = "vendor/nic1"
-const notExistingNICResourceName = "vendor/notexistingnic"
-const containerName = "container1"
+const (
+	nicResourceName            = "vendor/nic1"
+	notExistingNICResourceName = "vendor/notexistingnic"
+	containerName              = "container1"
+)
 
 func makePodByResourceList(resources *v1.ResourceList) *v1.Pod {
-	return &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{{
-		Resources: v1.ResourceRequirements{
-			Requests: *resources,
-			Limits:   *resources,
+	return &v1.Pod{
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Resources: v1.ResourceRequirements{
+						Requests: *resources,
+						Limits:   *resources,
+					},
+				},
+			},
 		},
-	}},
-	}}
+	}
 }
 
 type nodeTopologyMap map[string]topologyv1alpha1.NodeResourceTopology
 
-type topologyMatchTests []struct {
+type topologyMatchTests struct {
 	pod            *v1.Pod
 	nodeTopologies nodeTopologyMap
 	name           string
@@ -116,10 +123,14 @@ func makePodByResourceListWithManyContainers(resources *v1.ResourceList, contain
 			},
 		})
 	}
-	return &v1.Pod{Spec: v1.PodSpec{Containers: containers}}
+	return &v1.Pod{
+		Spec: v1.PodSpec{
+			Containers: containers,
+		},
+	}
 }
 
-func runTests(t *testing.T, topologyTests topologyMatchTests) {
+func runTests(t *testing.T, topologyTests []topologyMatchTests) {
 	nodeInfo := framework.NewNodeInfo()
 	for _, test := range topologyTests {
 		t.Run(test.name, func(t *testing.T) {
@@ -144,6 +155,18 @@ func runTests(t *testing.T, topologyTests topologyMatchTests) {
 
 func TestTopologyRequestsCorrectNodeResourceTopology(t *testing.T) {
 	nodes := nodeTopologyMap{}
+	resourceInfoList := topologyv1alpha1.ResourceInfoList{
+		{
+			Name:        "memory",
+			Capacity:    intstr.Parse("8Gi"),
+			Allocatable: intstr.Parse("8Gi"),
+		},
+		{
+			Name:        nicResourceName,
+			Capacity:    intstr.Parse("30"),
+			Allocatable: intstr.Parse("10"),
+		},
+	}
 	nodes["default/node1"] = topologyv1alpha1.NodeResourceTopology{
 		ObjectMeta:       metav1.ObjectMeta{Name: "node1"},
 		TopologyPolicies: []string{string(topologyv1alpha1.SingleNUMANodeContainerLevel)},
@@ -151,43 +174,30 @@ func TestTopologyRequestsCorrectNodeResourceTopology(t *testing.T) {
 			topologyv1alpha1.Zone{
 				Name: "node-0",
 				Type: "Node",
-				Resources: topologyv1alpha1.ResourceInfoList{
-					topologyv1alpha1.ResourceInfo{
-						Name:        "cpu",
-						Capacity:    intstr.Parse("20"),
-						Allocatable: intstr.Parse("4"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        "memory",
-						Capacity:    intstr.Parse("8Gi"),
-						Allocatable: intstr.Parse("8Gi"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        nicResourceName,
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("10"),
-					},
-				},
+				Resources: append(resourceInfoList, topologyv1alpha1.ResourceInfo{
+					Name:        "cpu",
+					Capacity:    intstr.Parse("20"),
+					Allocatable: intstr.Parse("4"),
+				}),
 			}, topologyv1alpha1.Zone{
 				Name: "node-1",
 				Type: "Node",
-				Resources: topologyv1alpha1.ResourceInfoList{
-					topologyv1alpha1.ResourceInfo{
-						Name:        "cpu",
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("8"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        "memory",
-						Capacity:    intstr.Parse("8Gi"),
-						Allocatable: intstr.Parse("8Gi"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        nicResourceName,
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("10"),
-					},
-				},
+				Resources: append(resourceInfoList, topologyv1alpha1.ResourceInfo{
+					Name:        "cpu",
+					Capacity:    intstr.Parse("30"),
+					Allocatable: intstr.Parse("8"),
+				}),
 			},
 		},
 	}
 
+	resourceInfoList = topologyv1alpha1.ResourceInfoList{
+		{
+			Name:        "memory",
+			Capacity:    intstr.Parse("8Gi"),
+			Allocatable: intstr.Parse("4Gi"),
+		},
+	}
 	nodes["default/node2"] = topologyv1alpha1.NodeResourceTopology{
 		ObjectMeta:       metav1.ObjectMeta{Name: "node2"},
 		TopologyPolicies: []string{string(topologyv1alpha1.SingleNUMANodeContainerLevel)},
@@ -195,39 +205,27 @@ func TestTopologyRequestsCorrectNodeResourceTopology(t *testing.T) {
 			topologyv1alpha1.Zone{
 				Name: "node-0",
 				Type: "Node",
-				Resources: topologyv1alpha1.ResourceInfoList{
-					topologyv1alpha1.ResourceInfo{
-						Name:        "cpu",
-						Capacity:    intstr.Parse("20"),
-						Allocatable: intstr.Parse("2"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        "memory",
-						Capacity:    intstr.Parse("8Gi"),
-						Allocatable: intstr.Parse("4Gi"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        nicResourceName,
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("5"),
-					},
-				},
+				Resources: append(resourceInfoList, topologyv1alpha1.ResourceInfo{
+					Name:        "cpu",
+					Capacity:    intstr.Parse("20"),
+					Allocatable: intstr.Parse("2"),
+				}, topologyv1alpha1.ResourceInfo{
+					Name:        nicResourceName,
+					Capacity:    intstr.Parse("30"),
+					Allocatable: intstr.Parse("5"),
+				}),
 			}, topologyv1alpha1.Zone{
 				Name: "node-1",
 				Type: "Node",
-				Resources: topologyv1alpha1.ResourceInfoList{
-					topologyv1alpha1.ResourceInfo{
-						Name:        "cpu",
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("4"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        "memory",
-						Capacity:    intstr.Parse("8Gi"),
-						Allocatable: intstr.Parse("4Gi"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        nicResourceName,
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("2"),
-					},
-				},
+				Resources: append(resourceInfoList, topologyv1alpha1.ResourceInfo{
+					Name:        "cpu",
+					Capacity:    intstr.Parse("30"),
+					Allocatable: intstr.Parse("4"),
+				}, topologyv1alpha1.ResourceInfo{
+					Name:        nicResourceName,
+					Capacity:    intstr.Parse("30"),
+					Allocatable: intstr.Parse("2"),
+				}),
 			},
 		},
 	}
@@ -239,39 +237,27 @@ func TestTopologyRequestsCorrectNodeResourceTopology(t *testing.T) {
 			topologyv1alpha1.Zone{
 				Name: "node-0",
 				Type: "Node",
-				Resources: topologyv1alpha1.ResourceInfoList{
-					topologyv1alpha1.ResourceInfo{
-						Name:        "cpu",
-						Capacity:    intstr.Parse("20"),
-						Allocatable: intstr.Parse("2"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        "memory",
-						Capacity:    intstr.Parse("8Gi"),
-						Allocatable: intstr.Parse("4Gi"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        nicResourceName,
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("5"),
-					},
-				},
+				Resources: append(resourceInfoList, topologyv1alpha1.ResourceInfo{
+					Name:        "cpu",
+					Capacity:    intstr.Parse("20"),
+					Allocatable: intstr.Parse("2"),
+				}, topologyv1alpha1.ResourceInfo{
+					Name:        nicResourceName,
+					Capacity:    intstr.Parse("30"),
+					Allocatable: intstr.Parse("5"),
+				}),
 			}, topologyv1alpha1.Zone{
 				Name: "node-1",
 				Type: "Node",
-				Resources: topologyv1alpha1.ResourceInfoList{
-					topologyv1alpha1.ResourceInfo{
-						Name:        "cpu",
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("4"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        "memory",
-						Capacity:    intstr.Parse("8Gi"),
-						Allocatable: intstr.Parse("4Gi"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        nicResourceName,
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("2"),
-					},
-				},
+				Resources: append(resourceInfoList, topologyv1alpha1.ResourceInfo{
+					Name:        "cpu",
+					Capacity:    intstr.Parse("30"),
+					Allocatable: intstr.Parse("4"),
+				}, topologyv1alpha1.ResourceInfo{
+					Name:        nicResourceName,
+					Capacity:    intstr.Parse("30"),
+					Allocatable: intstr.Parse("2"),
+				}),
 			},
 		},
 	}
@@ -300,9 +286,15 @@ func TestTopologyRequestsCorrectNodeResourceTopology(t *testing.T) {
 	}
 
 	// Test different QoS Guaranteed/Burstable/BestEffort
-	topologyTests := topologyMatchTests{
+	topologyTests := []topologyMatchTests{
 		{
-			pod:            &v1.Pod{Spec: v1.PodSpec{Containers: []v1.Container{{}}}},
+			pod: &v1.Pod{
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{
+						{},
+					},
+				},
+			},
 			nodeTopologies: nodes,
 			name:           "Best effort QoS, pod fit",
 			node:           node1,
@@ -392,6 +384,13 @@ func TestTopologyRequestsCorrectNodeResourceTopology(t *testing.T) {
 
 func TestTopologyRequestsIncorrectNodeResourceTopology(t *testing.T) {
 	nodes := nodeTopologyMap{}
+	resourceInfoList := topologyv1alpha1.ResourceInfoList{
+		{
+			Name:        "memory",
+			Capacity:    intstr.Parse("8Gi"),
+			Allocatable: intstr.Parse("4Gi"),
+		},
+	}
 	nodes["default/badly_formed_node"] = topologyv1alpha1.NodeResourceTopology{
 		ObjectMeta:       metav1.ObjectMeta{Name: "badly_formed_node"},
 		TopologyPolicies: []string{string(topologyv1alpha1.SingleNUMANodePodLevel)},
@@ -399,39 +398,27 @@ func TestTopologyRequestsIncorrectNodeResourceTopology(t *testing.T) {
 			topologyv1alpha1.Zone{
 				Name: "node-0",
 				Type: "Node",
-				Resources: topologyv1alpha1.ResourceInfoList{
-					topologyv1alpha1.ResourceInfo{
-						Name:        "cpu",
-						Capacity:    intstr.Parse("20"),
-						Allocatable: intstr.Parse("2"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        "memory",
-						Capacity:    intstr.Parse("8Gi"),
-						Allocatable: intstr.Parse("4Gi"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        nicResourceName,
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("5"),
-					},
-				},
+				Resources: append(resourceInfoList, topologyv1alpha1.ResourceInfo{
+					Name:        "cpu",
+					Capacity:    intstr.Parse("20"),
+					Allocatable: intstr.Parse("2"),
+				}, topologyv1alpha1.ResourceInfo{
+					Name:        nicResourceName,
+					Capacity:    intstr.Parse("30"),
+					Allocatable: intstr.Parse("5"),
+				}),
 			}, topologyv1alpha1.Zone{
 				Name: "node-75",
 				Type: "Node",
-				Resources: topologyv1alpha1.ResourceInfoList{
-					topologyv1alpha1.ResourceInfo{
-						Name:        "cpu",
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("4"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        "memory",
-						Capacity:    intstr.Parse("8Gi"),
-						Allocatable: intstr.Parse("4Gi"),
-					}, topologyv1alpha1.ResourceInfo{
-						Name:        nicResourceName,
-						Capacity:    intstr.Parse("30"),
-						Allocatable: intstr.Parse("2"),
-					},
-				},
+				Resources: append(resourceInfoList, topologyv1alpha1.ResourceInfo{
+					Name:        "cpu",
+					Capacity:    intstr.Parse("30"),
+					Allocatable: intstr.Parse("4"),
+				}, topologyv1alpha1.ResourceInfo{
+					Name:        nicResourceName,
+					Capacity:    intstr.Parse("30"),
+					Allocatable: intstr.Parse("2"),
+				}),
 			},
 		},
 	}
@@ -445,7 +432,7 @@ func TestTopologyRequestsIncorrectNodeResourceTopology(t *testing.T) {
 	}
 
 	// Test different QoS Guaranteed/Burstable/BestEffort
-	topologyTests := topologyMatchTests{
+	topologyTests := []topologyMatchTests{
 		{
 			pod: makePodByResourceListWithManyContainers(&v1.ResourceList{
 				v1.ResourceCPU:             *resource.NewQuantity(1, resource.DecimalSI),

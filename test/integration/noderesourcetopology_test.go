@@ -173,17 +173,12 @@ func TestTopologyMatchPlugin(t *testing.T) {
 
 	// Create a Node.
 	nodeName1 := "fake-node-1"
-	node1 := st.MakeNode().Name("fake-node-1").Label("node", nodeName1).Obj()
-	node1.Status.Allocatable = v1.ResourceList{
-		v1.ResourceCPU:    *resource.NewQuantity(4, resource.DecimalSI),
-		v1.ResourceMemory: *resource.NewQuantity(100, resource.DecimalSI),
-		v1.ResourcePods:   *resource.NewQuantity(32, resource.DecimalSI),
+	resList := map[v1.ResourceName]string{
+		v1.ResourceCPU:    "4",
+		v1.ResourceMemory: "100",
+		v1.ResourcePods:   "32",
 	}
-	node1.Status.Capacity = v1.ResourceList{
-		v1.ResourceCPU:    *resource.NewQuantity(4, resource.DecimalSI),
-		v1.ResourceMemory: *resource.NewQuantity(100, resource.DecimalSI),
-		v1.ResourcePods:   *resource.NewQuantity(32, resource.DecimalSI),
-	}
+	node1 := st.MakeNode().Name("fake-node-1").Label("node", nodeName1).Capacity(resList).Obj()
 	n1, err := cs.CoreV1().Nodes().Create(ctx, node1, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create Node %q: %v", nodeName1, err)
@@ -192,17 +187,7 @@ func TestTopologyMatchPlugin(t *testing.T) {
 	t.Logf(" Node 1 created: %v", n1)
 	// Create another Node.
 	nodeName2 := "fake-node-2"
-	node2 := st.MakeNode().Name("fake-node-2").Label("node", nodeName2).Obj()
-	node2.Status.Allocatable = v1.ResourceList{
-		v1.ResourceCPU:    *resource.NewQuantity(4, resource.DecimalSI),
-		v1.ResourceMemory: *resource.NewQuantity(100, resource.DecimalSI),
-		v1.ResourcePods:   *resource.NewQuantity(32, resource.DecimalSI),
-	}
-	node2.Status.Capacity = v1.ResourceList{
-		v1.ResourceCPU:    *resource.NewQuantity(4, resource.DecimalSI),
-		v1.ResourceMemory: *resource.NewQuantity(100, resource.DecimalSI),
-		v1.ResourcePods:   *resource.NewQuantity(32, resource.DecimalSI),
-	}
+	node2 := st.MakeNode().Name("fake-node-2").Label("node", nodeName2).Capacity(resList).Obj()
 	n2, err := cs.CoreV1().Nodes().Create(ctx, node2, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create Node %q: %v", nodeName2, err)
@@ -220,7 +205,7 @@ func TestTopologyMatchPlugin(t *testing.T) {
 		{
 			name: "Filtering out nodes that cannot fit resources on a single numa node in case of Guaranteed pod",
 			pods: []*v1.Pod{
-				withContainer(Req(st.MakePod().Namespace(ns.Name).Name("topology-aware-scheduler-pod"), map[v1.ResourceName]string{v1.ResourceCPU: "4", v1.ResourceMemory: "50Gi"}).Obj(), pause),
+				withContainer(withReqAndLimit(st.MakePod().Namespace(ns.Name).Name("topology-aware-scheduler-pod"), map[v1.ResourceName]string{v1.ResourceCPU: "4", v1.ResourceMemory: "50Gi"}).Obj(), pause),
 			},
 			nodeResourceTopologies: []*topologyv1alpha1.NodeResourceTopology{
 				{
@@ -365,7 +350,6 @@ func TestTopologyMatchPlugin(t *testing.T) {
 					},
 				},
 			},
-			//both nodes are possible
 			expectedNodes: []string{"fake-node-1", "fake-node-2"},
 		},
 		{
@@ -431,10 +415,8 @@ func TestTopologyMatchPlugin(t *testing.T) {
 					},
 				},
 			},
-			//both nodes are possible
 			expectedNodes: []string{"fake-node-1", "fake-node-2"},
 		},
-		//TODO: Add more test cases
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Start-topology-match-test %v", tt.name)
@@ -456,7 +438,6 @@ func TestTopologyMatchPlugin(t *testing.T) {
 			}
 
 			for i, p := range tt.pods {
-
 				// Wait for the pod to be scheduled.
 				err = wait.Poll(1*time.Second, 20*time.Second, func() (bool, error) {
 					return podScheduled(cs, ns.Name, p.Name), nil
@@ -499,12 +480,7 @@ func contains(s []string, e string) bool {
 func getNodeName(c clientset.Interface, podNamespace, podName string) (string, error) {
 	pod, err := c.CoreV1().Pods(podNamespace).Get(context.TODO(), podName, metav1.GetOptions{})
 	if err != nil {
-		// This could be a connection error so we want to retry.
-		klog.Errorf("klog error %v", err)
 		return "", err
-	}
-	if pod.Spec.NodeName == "" {
-		return "", fmt.Errorf("Node not assigned")
 	}
 	return pod.Spec.NodeName, nil
 }
@@ -618,7 +594,7 @@ func withContainer(pod *v1.Pod, image string) *v1.Pod {
 }
 
 // Req adds a new container to the inner pod with given resource map.
-func Req(p *st.PodWrapper, resMap map[v1.ResourceName]string) *st.PodWrapper {
+func withReqAndLimit(p *st.PodWrapper, resMap map[v1.ResourceName]string) *st.PodWrapper {
 	if len(resMap) == 0 {
 		return p
 	}
