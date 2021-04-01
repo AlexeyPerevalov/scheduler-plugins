@@ -429,15 +429,15 @@ func TestTopologyMatchPlugin(t *testing.T) {
 
 			defer testutils.CleanupPods(cs, t, tt.pods)
 			// Create Pods
-			for i := range tt.pods {
+			for _, p := range tt.pods {
 				t.Logf("Creating Pod %q", tt.pods[i].Name)
-				_, err := cs.CoreV1().Pods(ns.Name).Create(context.TODO(), tt.pods[i], metav1.CreateOptions{})
+				_, err := cs.CoreV1().Pods(ns.Name).Create(context.TODO(), p, metav1.CreateOptions{})
 				if err != nil {
-					t.Fatalf("Failed to create Pod %q: %v", tt.pods[i].Name, err)
+					t.Fatalf("Failed to create Pod %q: %v", p.Name, err)
 				}
 			}
 
-			for i, p := range tt.pods {
+			for _, p := range tt.pods {
 				// Wait for the pod to be scheduled.
 				err = wait.Poll(1*time.Second, 20*time.Second, func() (bool, error) {
 					return podScheduled(cs, ns.Name, p.Name), nil
@@ -446,7 +446,7 @@ func TestTopologyMatchPlugin(t *testing.T) {
 					t.Errorf("pod %q to be scheduled, error: %v", tt.pods[i].Name, err)
 				}
 
-				t.Logf(" p scheduled: %v", p.Name)
+				t.Logf("p scheduled: %v", p.Name)
 
 				// The other pods should be scheduled on the small nodes.
 				nodeName, err := getNodeName(cs, ns.Name, p.Name)
@@ -455,10 +455,9 @@ func TestTopologyMatchPlugin(t *testing.T) {
 				}
 				if contains(tt.expectedNodes, nodeName) {
 					t.Logf("Pod %q is on a nodes as expected.", p.Name)
-					continue
 				} else {
 					t.Errorf("Pod %s is expected on node %s, but found on node %s",
-						tt.pods[i].Name, tt.expectedNodes, nodeName)
+						p.Name, tt.expectedNodes, nodeName)
 				}
 
 			}
@@ -593,7 +592,7 @@ func withContainer(pod *v1.Pod, image string) *v1.Pod {
 	return pod
 }
 
-// Req adds a new container to the inner pod with given resource map.
+// withReqAndLimit adds a new container to the inner pod with given resource map.
 func withReqAndLimit(p *st.PodWrapper, resMap map[v1.ResourceName]string) *st.PodWrapper {
 	if len(resMap) == 0 {
 		return p
