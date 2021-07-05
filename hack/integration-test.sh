@@ -47,6 +47,8 @@ runTests() {
   kube::etcd::start
   kube::log::status "Running integration test cases"
 
+  #HACK remove it
+  mkdir /home/aperevalov/go/src/sigs.k8s.io/scheduler-plugins/vendor/k8s.io/apiextensions-apiserver/pkg/cmd/server/testing/testdata
   # TODO: make args customizable.
   go test -timeout=40m -mod=vendor sigs.k8s.io/scheduler-plugins/test/integration/...
 

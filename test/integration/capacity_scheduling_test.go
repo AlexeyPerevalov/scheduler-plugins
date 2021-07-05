@@ -35,6 +35,7 @@ import (
 	schedapi "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	fwkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
+	testframework "k8s.io/kubernetes/test/integration/framework"
 	testutil "k8s.io/kubernetes/test/integration/util"
 
 	schedconfig "sigs.k8s.io/scheduler-plugins/pkg/apis/config"
@@ -58,7 +59,8 @@ func TestCapacityScheduling(t *testing.T) {
 
 	registry := fwkruntime.Registry{capacityscheduling.Name: capacityscheduling.New}
 	t.Log("create apiserver")
-	_, config := util.StartApi(t, todo.Done())
+	apisetup := testframework.TestServerSetup{}
+	_, config := testframework.StartTestServer(t, todo.Done(), apisetup)
 
 	config.ContentType = "application/json"
 

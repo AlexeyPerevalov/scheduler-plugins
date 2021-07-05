@@ -18,7 +18,9 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -27,19 +29,27 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 
+	"k8s.io/apiextensions-apiserver/test/integration/fixtures"
 	"k8s.io/apimachinery/pkg/api/errors"
+
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/dynamic"
 	clientset "k8s.io/client-go/kubernetes"
+	restclient "k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
+	"k8s.io/kubernetes/pkg/controlplane"
 	"k8s.io/kubernetes/pkg/scheduler"
 	schedapi "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	fwkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
+	//"k8s.io/kubernetes/test/integration"
+	//testapiserver "k8s.io/kubernetes/test/integration/apiserver"
+	"k8s.io/kubernetes/test/integration/framework"
 	testutils "k8s.io/kubernetes/test/integration/util"
 	imageutils "k8s.io/kubernetes/test/utils/image"
 
@@ -55,6 +65,36 @@ const (
 	memory = string(v1.ResourceMemory)
 )
 
+func setup(t *testing.T, groupVersions ...schema.GroupVersion) (*httptest.Server, *clientset.Clientset, framework.CloseFunc) {
+	return setupWithResources(t, groupVersions, nil)
+}
+
+func setupWithOptions(t *testing.T, opts *framework.MasterConfigOptions, groupVersions ...schema.GroupVersion) (*httptest.Server, *clientset.Clientset, framework.CloseFunc) {
+	return setupWithResourcesWithOptions(t, opts, groupVersions, nil)
+}
+
+func setupWithResources(t *testing.T, groupVersions []schema.GroupVersion, resources []schema.GroupVersionResource) (*httptest.Server, *clientset.Clientset, framework.CloseFunc) {
+	return setupWithResourcesWithOptions(t, &framework.MasterConfigOptions{}, groupVersions, resources)
+}
+
+func setupWithResourcesWithOptions(t *testing.T, opts *framework.MasterConfigOptions, groupVersions []schema.GroupVersion, resources []schema.GroupVersionResource) (*httptest.Server, *clientset.Clientset, framework.CloseFunc) {
+	masterConfig := framework.NewIntegrationTestMasterConfigWithOptions(opts)
+	if len(groupVersions) > 0 || len(resources) > 0 {
+		resourceConfig := controlplane.DefaultAPIResourceConfigSource()
+		resourceConfig.EnableVersions(groupVersions...)
+		resourceConfig.EnableResources(resources...)
+		masterConfig.ExtraConfig.APIResourceConfigSource = resourceConfig
+	}
+	masterConfig.GenericConfig.OpenAPIConfig = framework.DefaultOpenAPIConfig()
+	_, s, closeFn := framework.RunAMaster(masterConfig)
+
+	clientSet, err := clientset.NewForConfig(&restclient.Config{Host: s.URL, QPS: -1})
+	if err != nil {
+		t.Fatalf("Error in create clientset: %v", err)
+	}
+	return s, clientSet, closeFn
+}
+
 func TestTopologyMatchPlugin(t *testing.T) {
 	todo := context.TODO()
 	ctx, cancelFunc := context.WithCancel(todo)
@@ -65,40 +105,104 @@ func TestTopologyMatchPlugin(t *testing.T) {
 	}
 	registry := fwkruntime.Registry{noderesourcetopology.Name: noderesourcetopology.New}
 	t.Log("create apiserver")
-	_, config := util.StartApi(t, todo.Done())
 
-	config.ContentType = "application/json"
-
-	apiExtensionClient, err := apiextensionsclient.NewForConfig(config)
+	tearDown, config, srvOpts, err := fixtures.StartDefaultServer(t)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	kubeConfigPath := util.BuildKubeConfigFile(config)
+	optJson, err := json.Marshal(srvOpts)
+	if err != nil {
+		t.Log("failed to srvopts")
+	}
+	t.Logf("apiserver created: %s", string(optJson))
+	defer tearDown()
+
+	s, cs, closeFn := setup(t)
+	defer closeFn()
+
+	t.Log("apiExtensionClient")
+	apiExtensionClient, err := apiextensionsclient.NewForConfig(config)
+
+	//apiExtensionClient, err := apiextensionsclient.NewForConfig(&restclient.Config{Host: s.URL})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Log("apiExtensionClient created")
+
+	kubeConfigPath := util.BuildKubeConfigFile(&restclient.Config{Host: s.URL})
 	if len(kubeConfigPath) == 0 {
 		t.Fatal("Build KubeConfigFile failed")
 	}
 	defer os.RemoveAll(kubeConfigPath)
 
 	t.Log("create crd")
-	if _, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, makeNodeResourceTopologyCRD(), metav1.CreateOptions{}); err != nil {
+
+	dynamicClient, err := dynamic.NewForConfig(config)
+
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	cs := kubernetes.NewForConfigOrDie(config)
+	crd := makeNodeResourceTopologyCRD()
+	_, err = fixtures.CreateNewV1CustomResourceDefinition(crd, apiExtensionClient, dynamicClient)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	topologyClient, err := topologyclientset.NewForConfig(config)
+	t.Log("created crd")
+	//if _, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, makeNodeResourceTopologyCRD(), metav1.CreateOptions{}); err != nil {
+	//t.Fatal(err)
+	//}
+
+	//clientSet := clientset.NewForConfigOrDie(&restclient.Config{Host: s.URL})
+
+	clientSet := clientset.NewForConfigOrDie(config)
+
+	crdGVR := schema.GroupVersionResource{Group: crd.Spec.Group, Version: crd.Spec.Versions[0].Name, Resource: "noderesourcetopologies"}
+
+	topologyClient, err := topologyclientset.NewForConfig(&restclient.Config{Host: s.URL})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if err = wait.Poll(100*time.Millisecond, 3*time.Second, func() (done bool, err error) {
-		groupList, _, err := cs.ServerGroupsAndResources()
+		//if crdList, err := apiExtensionClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{}); err == nil {
+		//t.Logf("CRD: %v", crdList)
+		//for _, item := range crdList.Items {
+		//jsonItem, err := json.Marshal(item)
+		//if err != nil {
+		//t.Logf("Failed to parse: %v", err)
+		//return false, err
+		//}
+		//t.Logf("Parsed json crd item: %s", string(jsonItem))
+		//if item.Spec.Group == "topology.node.k8s.io" {
+		//t.Logf("topology crd was successfully created!")
+		//return true, nil
+		//}
+		//}
+		//} else {
+		//t.Logf("Can't request CRD: %v", err)
+		//return false, err
+		//}
+
+		//groupList, _, err := clientSet.ServerGroupsAndResources()
+
+		t.Log("Request group and resources")
+		groupList, apiList, err := clientSet.ServerGroupsAndResources()
+		jsonString, _ := json.Marshal(groupList)
+		t.Logf("groupList: %s", string(jsonString))
 		if err != nil {
+			t.Logf("Can't request CRD: %v", err)
 			return false, nil
 		}
+		apiJson, _ := json.Marshal(apiList)
+		t.Logf("apiList: %s", string(apiJson))
 		for _, group := range groupList {
 			if group.Name == "topology.node.k8s.io" {
+				t.Logf("topology crd was successfully created!")
 				return true, nil
 			}
 		}
@@ -108,18 +212,29 @@ func TestTopologyMatchPlugin(t *testing.T) {
 		t.Fatalf("Waiting for crd read time out: %v", err)
 	}
 
+	t.Log("Create namespace")
+
+	nameSpaceName := fmt.Sprintf("integration-test-%v", string(uuid.NewUUID()))
+
 	ns, err := cs.CoreV1().Namespaces().Create(ctx, &v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("integration-test-%v", string(uuid.NewUUID()))}}, metav1.CreateOptions{})
+		ObjectMeta: metav1.ObjectMeta{Name: nameSpaceName}}, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
-		t.Fatalf("Failed to integration test ns: %v", err)
+		t.Fatalf("Failed to create namespace integration test ns: %v", err)
 	}
 
+	crclient := dynamicClient.Resource(crdGVR).Namespace(nameSpaceName)
+	t.Logf("crclient: %v", crclient)
+
+	t.Log("namespace created")
+
 	autoCreate := false
-	t.Logf("namespaces %+v", ns.Name)
+	t.Logf("namespace %+v", ns.Name)
 	_, err = cs.CoreV1().ServiceAccounts(ns.Name).Create(ctx, &v1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: ns.Name}, AutomountServiceAccountToken: &autoCreate}, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		t.Fatalf("Failed to create ns default: %v", err)
+	} else {
+		t.Log("ns default created")
 	}
 
 	testCtx.NS = ns
@@ -147,6 +262,7 @@ func TestTopologyMatchPlugin(t *testing.T) {
 		},
 	}
 
+	t.Log("Starting scheduler")
 	testCtx = util.InitTestSchedulerWithOptions(
 		t,
 		testCtx,
@@ -415,6 +531,7 @@ func TestTopologyMatchPlugin(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to create Pod %q: %v", p.Name, err)
 				}
+				t.Logf("pod created: %v", p)
 			}
 
 			for _, p := range tt.pods {

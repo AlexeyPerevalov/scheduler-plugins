@@ -37,6 +37,7 @@ import (
 	schedapi "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	fwkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 	st "k8s.io/kubernetes/pkg/scheduler/testing"
+	testframework "k8s.io/kubernetes/test/integration/framework"
 	testutils "k8s.io/kubernetes/test/integration/util"
 	imageutils "k8s.io/kubernetes/test/utils/image"
 
@@ -59,7 +60,9 @@ func TestCoschedulingPlugin(t *testing.T) {
 	}
 	registry := fwkruntime.Registry{coscheduling.Name: coscheduling.New}
 	t.Log("create apiserver")
-	_, config := util.StartApi(t, todo.Done())
+
+	apisetup := testframework.TestServerSetup{}
+	_, config := testframework.StartTestServer(t, todo.Done(), apisetup)
 
 	config.ContentType = "application/json"
 
