@@ -70,12 +70,7 @@ func (tm *TopologyMatch) Name() string {
 func extractResources(zone topologyv1alpha1.Zone) v1.ResourceList {
 	res := make(v1.ResourceList)
 	for _, resInfo := range zone.Resources {
-		quantity, err := resource.ParseQuantity(resInfo.Allocatable.String())
-		if err != nil {
-			klog.Errorf("Failed to parse %s", resInfo.Allocatable.String())
-			continue
-		}
-		res[v1.ResourceName(resInfo.Name)] = quantity
+		res[v1.ResourceName(resInfo.Name)] = resInfo.Allocatable
 	}
 	return res
 }

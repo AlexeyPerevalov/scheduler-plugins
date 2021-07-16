@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -198,13 +197,13 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        cpu,
-									Allocatable: intstr.FromString("2"),
-									Capacity:    intstr.FromString("2"),
+									Allocatable: resource.MustParse("2"),
+									Capacity:    resource.MustParse("2"),
 								},
 								topologyv1alpha1.ResourceInfo{
 									Name:        memory,
-									Allocatable: intstr.Parse("8Gi"),
-									Capacity:    intstr.Parse("8Gi"),
+									Allocatable: resource.MustParse("8Gi"),
+									Capacity:    resource.MustParse("8Gi"),
 								},
 							},
 						},
@@ -214,13 +213,13 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        cpu,
-									Allocatable: intstr.FromString("2"),
-									Capacity:    intstr.FromString("2"),
+									Allocatable: resource.MustParse("2"),
+									Capacity:    resource.MustParse("2"),
 								},
 								topologyv1alpha1.ResourceInfo{
 									Name:        memory,
-									Allocatable: intstr.Parse("8Gi"),
-									Capacity:    intstr.Parse("8Gi"),
+									Allocatable: resource.MustParse("8Gi"),
+									Capacity:    resource.MustParse("8Gi"),
 								},
 							},
 						},
@@ -236,13 +235,13 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        cpu,
-									Allocatable: intstr.FromString("4"),
-									Capacity:    intstr.FromString("4"),
+									Allocatable: resource.MustParse("4"),
+									Capacity:    resource.MustParse("4"),
 								},
 								topologyv1alpha1.ResourceInfo{
 									Name:        memory,
-									Allocatable: intstr.Parse("8Gi"),
-									Capacity:    intstr.Parse("8Gi"),
+									Allocatable: resource.MustParse("8Gi"),
+									Capacity:    resource.MustParse("8Gi"),
 								},
 							},
 						},
@@ -252,13 +251,13 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        cpu,
-									Allocatable: intstr.FromString("0"),
-									Capacity:    intstr.FromString("0"),
+									Allocatable: resource.MustParse("0"),
+									Capacity:    resource.MustParse("0"),
 								},
 								topologyv1alpha1.ResourceInfo{
 									Name:        memory,
-									Allocatable: intstr.Parse("8Gi"),
-									Capacity:    intstr.Parse("8Gi"),
+									Allocatable: resource.MustParse("8Gi"),
+									Capacity:    resource.MustParse("8Gi"),
 								},
 							},
 						},
@@ -283,8 +282,8 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        cpu,
-									Allocatable: intstr.FromString("4"),
-									Capacity:    intstr.FromString("4"),
+									Allocatable: resource.MustParse("4"),
+									Capacity:    resource.MustParse("4"),
 								},
 							},
 						},
@@ -294,8 +293,8 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        cpu,
-									Allocatable: intstr.FromString("0"),
-									Capacity:    intstr.FromString("0"),
+									Allocatable: resource.MustParse("0"),
+									Capacity:    resource.MustParse("0"),
 								},
 							},
 						},
@@ -311,8 +310,8 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        cpu,
-									Allocatable: intstr.FromString("2"),
-									Capacity:    intstr.FromString("2"),
+									Allocatable: resource.MustParse("2"),
+									Capacity:    resource.MustParse("2"),
 								},
 							},
 						},
@@ -322,8 +321,8 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        cpu,
-									Allocatable: intstr.FromString("2"),
-									Capacity:    intstr.FromString("2"),
+									Allocatable: resource.MustParse("2"),
+									Capacity:    resource.MustParse("2"),
 								},
 							},
 						},
@@ -348,8 +347,8 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        "foo",
-									Allocatable: intstr.FromString("2"),
-									Capacity:    intstr.FromString("2"),
+									Allocatable: resource.MustParse("2"),
+									Capacity:    resource.MustParse("2"),
 								},
 							},
 						},
@@ -359,8 +358,8 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        "foo",
-									Allocatable: intstr.FromString("2"),
-									Capacity:    intstr.FromString("2"),
+									Allocatable: resource.MustParse("2"),
+									Capacity:    resource.MustParse("2"),
 								},
 							},
 						},
@@ -376,8 +375,8 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        "foo",
-									Allocatable: intstr.FromString("2"),
-									Capacity:    intstr.FromString("2"),
+									Allocatable: resource.MustParse("2"),
+									Capacity:    resource.MustParse("2"),
 								},
 							},
 						},
@@ -387,8 +386,8 @@ func TestTopologyMatchPlugin(t *testing.T) {
 							Resources: topologyv1alpha1.ResourceInfoList{
 								topologyv1alpha1.ResourceInfo{
 									Name:        "foo",
-									Allocatable: intstr.FromString("2"),
-									Capacity:    intstr.FromString("2"),
+									Allocatable: resource.MustParse("2"),
+									Capacity:    resource.MustParse("2"),
 								},
 							},
 						},

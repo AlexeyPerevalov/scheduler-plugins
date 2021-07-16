@@ -28,8 +28,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
@@ -60,11 +58,7 @@ func makeResourceListFromZones(zones topologyv1alpha1.ZoneList) v1.ResourceList 
 	result := make(v1.ResourceList)
 	for _, zone := range zones {
 		for _, resInfo := range zone.Resources {
-			resQuantity, err := resource.ParseQuantity(resInfo.Allocatable.String())
-			if err != nil {
-				klog.Errorf("Failed to parse %s", resInfo.Allocatable.String())
-				continue
-			}
+			resQuantity := resInfo.Allocatable
 			if quantity, ok := result[v1.ResourceName(resInfo.Name)]; ok {
 				resQuantity.Add(quantity)
 			}
@@ -95,8 +89,8 @@ func makePodByResourceListWithManyContainers(resources *v1.ResourceList, contain
 func makeTopologyResInfo(name, capacity, allocatable string) topologyv1alpha1.ResourceInfo {
 	return topologyv1alpha1.ResourceInfo{
 		Name:        name,
-		Capacity:    intstr.Parse(capacity),
-		Allocatable: intstr.Parse(allocatable),
+		Capacity:    resource.MustParse(capacity),
+		Allocatable: resource.MustParse(allocatable),
 	}
 }
 
